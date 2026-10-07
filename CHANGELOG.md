@@ -2,6 +2,10 @@
 
 All notable changes are recorded in this file.
 
+## Unreleased
+
+- Add a reusable GitHub Action with pull request change detection and GitHub annotations
+
 ## 0.2.0 - 2026-10-07
 
 - Added `--changed-since <ref>` for checking only SQL files changed in a pull request or branch

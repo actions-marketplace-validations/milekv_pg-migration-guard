@@ -1,0 +1,66 @@
+name: PostgreSQL Migration Guard
+description: Check changed PostgreSQL migrations for locking, rewrites, validation, and data loss risks
+author: Miłosz Kordziński
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  paths:
+    description: Newline-separated SQL files or glob patterns
+    required: false
+    default: migrations/**/*.sql
+  changed-since:
+    description: Git reference used to select changed SQL files. Pull requests default to their base branch.
+    required: false
+    default: ''
+  fail-on:
+    description: Minimum severity that fails the check - error, warning, or never
+    required: false
+    default: error
+  database-url:
+    description: Optional read-only PostgreSQL connection URL
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+    - name: Check PostgreSQL migrations
+      shell: bash
+      env:
+        INPUT_PATHS: ${{ inputs.paths }}
+        INPUT_CHANGED_SINCE: ${{ inputs.changed-since }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        DATABASE_URL: ${{ inputs.database-url }}
+      run: |
+        set -euo pipefail
+
+        paths=()
+        while IFS= read -r path; do
+          if [[ -n "$path" ]]; then
+            paths+=("$path")
+          fi
+        done <<< "$INPUT_PATHS"
+
+        if [[ ${#paths[@]} -eq 0 ]]; then
+          echo "::error::The paths input must include at least one SQL path or glob."
+          exit 2
+        fi
+
+        changed_since="$INPUT_CHANGED_SINCE"
+        if [[ -z "$changed_since" && -n "${GITHUB_BASE_REF:-}" ]]; then
+          changed_since="origin/$GITHUB_BASE_REF"
+        fi
+
+        args=("${paths[@]}" --format github --fail-on "$INPUT_FAIL_ON")
+        if [[ -n "$changed_since" ]]; then
+          args+=(--changed-since "$changed_since")
+        fi
+
+        npx --yes pg-migration-guard@0.2.0 "${args[@]}"

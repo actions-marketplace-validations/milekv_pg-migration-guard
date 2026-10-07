@@ -23,3 +23,17 @@ jobs:
       - run: npm run check
       - run: npm run build
       - run: npm pack --dry-run
+
+  action-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Create a migration fixture
+        run: |
+          mkdir -p action-fixture
+          echo 'CREATE INDEX orders_created_at_idx ON orders (created_at);' > action-fixture/001_index.sql
+      - name: Run the local action
+        uses: ./
+        with:
+          paths: action-fixture/**/*.sql
+          fail-on: never

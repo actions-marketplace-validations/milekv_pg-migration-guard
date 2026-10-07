@@ -111,6 +111,43 @@ Exit codes:
 
 ## GitHub Actions
 
+The reusable action checks only migrations changed by a pull request by default:
+
+```yaml
+name: Migration safety
+
+on:
+  pull_request:
+    paths:
+      - "migrations/**/*.sql"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: milekv/pg-migration-guard@action-v1
+        with:
+          paths: migrations/**/*.sql
+```
+
+Set `fail-on` to `warning` to enforce warnings as well as errors. Multiple paths can be provided on separate lines:
+
+```yaml
+      - uses: milekv/pg-migration-guard@action-v1
+        with:
+          paths: |
+            migrations/**/*.sql
+            database/changes/**/*.sql
+          fail-on: warning
+```
+
+The action uses `origin/${{ github.base_ref }}` for pull requests. For other events, provide `changed-since` explicitly or omit it to analyze all matching files.
+
+The equivalent workflow without the reusable action is:
+
 ```yaml
 name: Migration safety
 
