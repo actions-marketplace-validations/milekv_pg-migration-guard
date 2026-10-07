@@ -28,7 +28,7 @@ runs:
   using: composite
   steps:
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: 20
     - name: Check PostgreSQL migrations
@@ -63,4 +63,6 @@ runs:
           args+=(--changed-since "$changed_since")
         fi
 
-        npx --yes pg-migration-guard@0.2.0 "${args[@]}"
+        install_dir="$RUNNER_TEMP/pg-migration-guard-action"
+        npm install --prefix "$install_dir" --no-save --ignore-scripts pg-migration-guard@0.2.0
+        node "$install_dir/node_modules/pg-migration-guard/dist/cli.js" "${args[@]}"
