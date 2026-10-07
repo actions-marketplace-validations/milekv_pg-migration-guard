@@ -95,6 +95,17 @@ This is an early release focused on PostgreSQL DDL with predictable lock and rew
 
 The research and product boundary are documented in [docs/research.md](docs/research.md).
 
+## Roadmap
+
+The project is designed as a safety layer that works before Prisma, Drizzle, Flyway, TypeORM, or another migration runner. It is not a replacement migration framework.
+
+1. `check` - detect lock, rewrite, scan, compatibility, and data-loss risks.
+2. `plan` - produce a reviewable, safer sequence of PostgreSQL statements.
+3. `verify` - rehearse migrations against a disposable database and report duration and lock behavior.
+4. `apply` - considered only after the first three stages are reliable and used in real repositories.
+
+The next milestone is five external repositories running `check` in CI. New features will be driven by false-positive reports and real migrations rather than rule count.
+
 ## License
 
 MIT
