@@ -1,6 +1,7 @@
 # pg-migration-guard
 
 [![CI](https://github.com/milekv/pg-migration-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/milekv/pg-migration-guard/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/pg-migration-guard)](https://www.npmjs.com/package/pg-migration-guard)
 [![License: MIT](https://img.shields.io/badge/license-MIT-16a34a)](LICENSE)
 
 Database-aware safety checks for PostgreSQL migrations.
@@ -13,7 +14,7 @@ Static linters can identify risky SQL syntax. They cannot tell whether the affec
 npx pg-migration-guard "migrations/**/*.sql"
 ```
 
-Until the first npm release, run the public repository directly:
+You can also run the current main branch directly:
 
 ```bash
 npx github:milekv/pg-migration-guard "migrations/**/*.sql"
