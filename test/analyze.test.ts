@@ -52,4 +52,13 @@ describe("analyze", () => {
     expect(result.findings.map((item) => item.rule)).toContain("destructive-change");
     expect(result.findings.filter((item) => item.rule === "missing-lock-timeout")).toHaveLength(1);
   });
+
+  it("does not treat dropping a constraint as dropping data", () => {
+    const result = analyze([{ path: "005.sql", sql: `
+      SET lock_timeout = '3s';
+      ALTER TABLE users DROP CONSTRAINT users_email_check;
+    ` }]);
+
+    expect(result.findings.some((item) => item.rule === "destructive-change")).toBe(false);
+  });
 });

@@ -2,83 +2,153 @@
 
 [![CI](https://github.com/milekv/pg-migration-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/milekv/pg-migration-guard/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/pg-migration-guard)](https://www.npmjs.com/package/pg-migration-guard)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933)](package.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-16a34a)](LICENSE)
 
-Database-aware safety checks for PostgreSQL migrations.
+Preflight safety checks for PostgreSQL migrations.
 
-Static linters can identify risky SQL syntax. They cannot tell whether the affected table has 200 rows or 200 million. `pg-migration-guard` combines migration analysis with optional, read-only PostgreSQL metadata so the same operation can receive a different severity based on its real production impact.
+`pg-migration-guard` reads SQL migration files, identifies operations that can block writes, rewrite large tables, or remove data, and explains a safer deployment pattern. It can optionally read table size and estimated row count from PostgreSQL to adjust finding severity to the database being changed.
 
-## Quick start
+It does not execute migration SQL.
+
+## Example
+
+```sql
+SET lock_timeout = '3s';
+ALTER TABLE orders ALTER COLUMN status SET NOT NULL;
+```
+
+```text
+! WARNING examples/readme.sql:2 [set-not-null]
+   SET NOT NULL may scan the entire table on orders - lock: ACCESS EXCLUSIVE
+   Validation can be slow on a populated table and the final change requires an ACCESS EXCLUSIVE lock.
+   Fix: Add a CHECK (column IS NOT NULL) NOT VALID, validate it separately, then set NOT NULL.
+
+0 errors, 1 warnings, 1 total findings.
+```
+
+The example is available at [examples/readme.sql](examples/readme.sql). Line numbers are preserved for terminal and GitHub Actions output.
+
+## Install and run
+
+Run without installing:
 
 ```bash
 npx pg-migration-guard "migrations/**/*.sql"
 ```
 
-You can also run the current main branch directly:
+Or add it to a project:
 
 ```bash
-npx github:milekv/pg-migration-guard "migrations/**/*.sql"
+npm install --save-dev pg-migration-guard
+npx pg-migration-guard "migrations/**/*.sql"
 ```
 
-Add database context without granting write access:
+Requires Node.js 20 or newer.
+
+## Add database context
+
+Static analysis cannot distinguish a small development table from a table with millions of rows. Connected mode reads PostgreSQL catalog metadata and includes that context in the result:
 
 ```bash
-DATABASE_URL="postgres://readonly:password@localhost/app" \
-  npx pg-migration-guard "migrations/**/*.sql"
+npx pg-migration-guard "migrations/**/*.sql" \
+  --database-url "postgres://migration_guard:password@localhost/app"
 ```
 
-The database connection is optional. When provided, the CLI starts a read-only transaction and reads only PostgreSQL catalog metadata. It never executes migration SQL.
+You can also set `DATABASE_URL` instead of passing the option. The connection is optional. When present, the CLI opens a read-only transaction and reads table size, estimated row count, and server version. See [database access](docs/database-access.md) for the exact queries and a restricted role example.
 
-## What it detects
+## Checks
 
-- Index creation that blocks writes.
-- `CREATE INDEX CONCURRENTLY` inside a transaction.
-- `SET NOT NULL` operations that scan populated tables.
-- Type changes that may rewrite a table.
-- Volatile defaults that can rewrite existing rows.
-- Foreign keys that validate all existing rows immediately.
-- Destructive table and column removal.
-- Missing `lock_timeout` protection.
+| Rule | Detects | Default severity |
+| --- | --- | --- |
+| `index-not-concurrent` | Index creation that blocks writes on an existing table | warning |
+| `concurrent-index-in-transaction` | `CREATE INDEX CONCURRENTLY` inside a transaction | error |
+| `set-not-null` | `SET NOT NULL` operations that may scan a populated table | warning |
+| `alter-column-type` | Column type changes that may rewrite a table | error |
+| `volatile-default` | Volatile defaults that may rewrite existing rows | error |
+| `foreign-key-validates-immediately` | Foreign keys that validate existing rows immediately | warning |
+| `destructive-change` | Table and column removal | error |
+| `missing-lock-timeout` | `ALTER TABLE` without a migration-level `lock_timeout` | info |
 
-Connected mode enriches findings with table size and estimated row count. Operations against tables above 1 GB or one million rows are escalated. Tables above 10 GB or ten million rows receive the highest severity.
+In connected mode, findings are escalated for tables at or above 1 GB or one million estimated rows. Tables at or above 10 GB or ten million estimated rows receive error severity.
 
-## Output formats
+## CLI
 
-Human-readable output:
+```text
+Usage: pg-migration-guard [options] <paths...>
+
+Arguments:
+  paths                  SQL files or glob patterns
+
+Options:
+  -V, --version          output the version number
+  --database-url <url>   read-only PostgreSQL connection URL (or set DATABASE_URL)
+  --format <format>      text, json, or github (default: "text")
+  --fail-on <level>      error, warning, or never (default: "error")
+  -h, --help             display help for command
+```
+
+Examples:
 
 ```bash
-pg-migration-guard migrations/*.sql
+pg-migration-guard migrations/001_add_index.sql
+pg-migration-guard "migrations/**/*.sql" --format json
+pg-migration-guard "migrations/**/*.sql" --format github --fail-on warning
+pg-migration-guard "migrations/**/*.sql" --fail-on never
 ```
 
-Machine-readable JSON:
+Exit codes:
 
-```bash
-pg-migration-guard migrations/*.sql --format json
+| Code | Meaning |
+| --- | --- |
+| `0` | The configured failure threshold was not reached |
+| `1` | At least one finding reached the configured failure threshold |
+| `2` | Input, configuration, or execution error |
+
+## GitHub Actions
+
+```yaml
+name: Migration safety
+
+on:
+  pull_request:
+    paths:
+      - "migrations/**/*.sql"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npx --yes pg-migration-guard@0.1.1 "migrations/**/*.sql" --format github
 ```
 
-GitHub Actions annotations:
+Connected mode can use a repository secret:
 
-```bash
-pg-migration-guard migrations/*.sql --format github
+```yaml
+      - run: npx --yes pg-migration-guard@0.1.1 "migrations/**/*.sql" --format github
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_GUARD_DATABASE_URL }}
 ```
 
-Choose when CI should fail:
+Use a dedicated read-only PostgreSQL role. Do not expose a production connection string in workflow files or logs.
 
-```bash
-pg-migration-guard migrations/*.sql --fail-on error
-pg-migration-guard migrations/*.sql --fail-on warning
-pg-migration-guard migrations/*.sql --fail-on never
-```
+## Scope and limitations
 
-## Security model
+The current release targets PostgreSQL DDL that has known lock, rewrite, validation, or data-loss implications. Rules are deterministic regular-expression checks over parsed statements. This keeps results explainable, but it is not a complete PostgreSQL parser and cannot prove that a migration is safe.
 
-- Migration files are analyzed locally.
-- No telemetry and no hosted service.
-- The optional database connection uses `BEGIN READ ONLY`.
-- Catalog queries have a five-second statement timeout.
-- The migration itself is never executed.
+Important boundaries:
 
-Use a dedicated read-only PostgreSQL role in CI.
+- The CLI does not run, plan, or roll back migrations.
+- It does not inspect application code or deployment order.
+- Estimated row counts come from PostgreSQL statistics and may be stale.
+- Dynamic SQL inside functions is outside the current analysis scope.
+- A clean result means no current rule matched. It is not a substitute for review or rehearsal.
+
+If a rule reports SQL incorrectly, open a [false-positive report](https://github.com/milekv/pg-migration-guard/issues/new?template=false_positive.yml) with a minimal migration.
 
 ## Development
 
@@ -87,26 +157,22 @@ npm install
 npm test
 npm run check
 npm run build
-npm run dev -- examples/risky.sql
+npm run dev -- examples/risky.sql --fail-on never
 ```
 
-## Status
-
-This is an early release focused on PostgreSQL DDL with predictable lock and rewrite behavior. Findings are intentionally explainable and include the safer deployment pattern.
-
-The research and product boundary are documented in [docs/research.md](docs/research.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change. Product boundaries and source notes are in [docs/research.md](docs/research.md).
 
 ## Roadmap
 
-The project is designed as a safety layer that works before Prisma, Drizzle, Flyway, TypeORM, or another migration runner. It is not a replacement migration framework.
+The next work is driven by real migrations and reproducible false positives:
 
-1. `check` - detect lock, rewrite, scan, compatibility, and data-loss risks.
-2. `plan` - produce a reviewable, safer sequence of PostgreSQL statements.
-3. `verify` - rehearse migrations against a disposable database and report duration and lock behavior.
-4. `apply` - considered only after the first three stages are reliable and used in real repositories.
+- Broader PostgreSQL statement coverage without reducing precision
+- Configuration for rule severity and targeted ignores
+- Reviewable migration plans for selected high-risk operations
+- Rehearsal against disposable PostgreSQL databases
 
-The next milestone is five external repositories running `check` in CI. New features will be driven by false-positive reports and real migrations rather than rule count.
+This project is a preflight check for migration tools such as Prisma, Drizzle, Flyway, and TypeORM. It is not a replacement migration framework.
 
 ## License
 
-MIT
+[MIT](LICENSE)

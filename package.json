@@ -1,7 +1,7 @@
 {
   "name": "pg-migration-guard",
-  "version": "0.1.0",
-  "description": "Database-aware safety checks for PostgreSQL migrations",
+  "version": "0.1.1",
+  "description": "Preflight safety checks for PostgreSQL migrations with optional database context",
   "type": "module",
   "bin": {
     "pg-migration-guard": "dist/cli.js"
@@ -9,7 +9,12 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "docs",
+    "examples"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -23,10 +28,12 @@
   },
   "keywords": [
     "postgresql",
+    "postgres",
     "migration",
     "database",
     "lint",
-    "devtools"
+    "devtools",
+    "ci"
   ],
   "license": "MIT",
   "repository": {

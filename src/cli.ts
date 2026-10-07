@@ -9,8 +9,8 @@ import { inspectDatabase } from "./introspect.js";
 const program = new Command();
 program
   .name("pg-migration-guard")
-  .description("Database-aware safety checks for PostgreSQL migrations")
-  .version("0.1.0")
+  .description("Preflight safety checks for PostgreSQL migrations")
+  .version("0.1.1")
   .argument("<paths...>", "SQL files or glob patterns")
   .option("--database-url <url>", "read-only PostgreSQL connection URL (or set DATABASE_URL)")
   .option("--format <format>", "text, json, or github", "text")

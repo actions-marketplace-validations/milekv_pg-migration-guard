@@ -103,7 +103,7 @@ export function analyze(files: SourceFile[], database?: DatabaseContext): Analys
           "Immediate validation scans existing data and can hold locks longer than expected.",
           "Add the foreign key as NOT VALID and run VALIDATE CONSTRAINT separately."));
       }
-      if (/\bDROP\s+(?:TABLE|COLUMN)\b/i.test(sql) || /\bALTER\s+TABLE\b[\s\S]*\bDROP\s+(?:COLUMN\s+)?/i.test(sql)) {
+      if (/\bDROP\s+TABLE\b/i.test(sql) || /\bALTER\s+TABLE\b[\s\S]*\bDROP\s+COLUMN\b/i.test(sql)) {
         findings.push(finding("destructive-change", "error", file.path, statement.line, table, context,
           "Destructive schema change",
           "Dropping a table or column can break older application versions and permanently remove data.",
