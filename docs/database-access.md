@@ -35,7 +35,7 @@ Store the connection URL as an Actions secret named `MIGRATION_GUARD_DATABASE_UR
 
 ```yaml
 - name: Check PostgreSQL migrations
-  run: npx --yes pg-migration-guard@0.1.1 "migrations/**/*.sql" --format github
+  run: npx --yes pg-migration-guard@0.2.0 "migrations/**/*.sql" --changed-since origin/${{ github.base_ref }} --format github
   env:
     DATABASE_URL: ${{ secrets.MIGRATION_GUARD_DATABASE_URL }}
 ```

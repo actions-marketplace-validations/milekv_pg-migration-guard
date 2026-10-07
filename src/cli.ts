@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { Command } from "commander";
 import { analyze } from "./analyze.js";
-import { expandPaths } from "./files.js";
+import { changedSqlFilesSince, expandPaths, filterChangedPaths } from "./files.js";
 import { formatGithub, formatText } from "./format.js";
 import { inspectDatabase } from "./introspect.js";
 
@@ -10,14 +10,21 @@ const program = new Command();
 program
   .name("pg-migration-guard")
   .description("Preflight safety checks for PostgreSQL migrations")
-  .version("0.1.1")
+  .version("0.2.0")
   .argument("<paths...>", "SQL files or glob patterns")
   .option("--database-url <url>", "read-only PostgreSQL connection URL (or set DATABASE_URL)")
+  .option("--changed-since <ref>", "check only SQL files changed since a Git reference")
   .option("--format <format>", "text, json, or github", "text")
   .option("--fail-on <level>", "error, warning, or never", "error")
-  .action(async (patterns: string[], options: { databaseUrl?: string; format: string; failOn: string }) => {
-    const paths = await expandPaths(patterns);
-    if (paths.length === 0) throw new Error(`No SQL files matched: ${patterns.join(", ")}`);
+  .action(async (patterns: string[], options: { databaseUrl?: string; changedSince?: string; format: string; failOn: string }) => {
+    if (!["text", "json", "github"].includes(options.format)) throw new Error(`Unsupported format: ${options.format}`);
+    if (!["error", "warning", "never"].includes(options.failOn)) throw new Error(`Unsupported failure level: ${options.failOn}`);
+
+    const matchedPaths = await expandPaths(patterns);
+    if (matchedPaths.length === 0) throw new Error(`No SQL files matched: ${patterns.join(", ")}`);
+    const paths = options.changedSince
+      ? filterChangedPaths(matchedPaths, await changedSqlFilesSince(options.changedSince))
+      : matchedPaths;
     const files = await Promise.all(paths.map(async (path) => ({ path, sql: await readFile(path, "utf8") })));
     const connectionString = options.databaseUrl ?? process.env.DATABASE_URL;
     const database = connectionString ? await inspectDatabase(connectionString) : undefined;
@@ -25,8 +32,7 @@ program
 
     if (options.format === "json") console.log(JSON.stringify(result, null, 2));
     else if (options.format === "github") console.log(formatGithub(result));
-    else if (options.format === "text") console.log(formatText(result));
-    else throw new Error(`Unsupported format: ${options.format}`);
+    else console.log(formatText(result));
 
     const hasError = result.findings.some((item) => item.severity === "error");
     const hasWarning = result.findings.some((item) => item.severity === "warning");

@@ -1,5 +1,9 @@
 import { readdir, stat } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 function globRegex(pattern: string): RegExp {
   const normalized = pattern.replaceAll("\\", "/");
@@ -60,4 +64,26 @@ export async function expandPaths(patterns: string[]): Promise<string[]> {
     }
   }
   return [...output].sort();
+}
+
+export function filterChangedPaths(paths: string[], changedPaths: string[]): string[] {
+  const changed = new Set(changedPaths.map((path) => path.replaceAll("\\", "/")));
+  return paths.filter((path) => changed.has(path.replaceAll("\\", "/")));
+}
+
+export async function changedSqlFilesSince(reference: string): Promise<string[]> {
+  const { stdout } = await execFileAsync("git", [
+    "diff",
+    "--name-only",
+    "--diff-filter=ACMR",
+    "--end-of-options",
+    `${reference}...HEAD`,
+    "--",
+    "*.sql",
+  ], { cwd: process.cwd(), encoding: "utf8" });
+
+  return stdout
+    .split(/\r?\n/)
+    .map((path) => path.trim().replaceAll("\\", "/"))
+    .filter(Boolean);
 }

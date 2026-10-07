@@ -83,6 +83,7 @@ Arguments:
 Options:
   -V, --version          output the version number
   --database-url <url>   read-only PostgreSQL connection URL (or set DATABASE_URL)
+  --changed-since <ref>  check only SQL files changed since a Git reference
   --format <format>      text, json, or github (default: "text")
   --fail-on <level>      error, warning, or never (default: "error")
   -h, --help             display help for command
@@ -95,7 +96,10 @@ pg-migration-guard migrations/001_add_index.sql
 pg-migration-guard "migrations/**/*.sql" --format json
 pg-migration-guard "migrations/**/*.sql" --format github --fail-on warning
 pg-migration-guard "migrations/**/*.sql" --fail-on never
+pg-migration-guard "migrations/**/*.sql" --changed-since origin/main
 ```
+
+`--changed-since` intersects the requested paths with added, copied, modified, and renamed SQL files in `<ref>...HEAD`. This is useful when an existing repository has migration history that should not be re-reviewed on every pull request.
 
 Exit codes:
 
@@ -120,16 +124,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npx --yes pg-migration-guard@0.1.1 "migrations/**/*.sql" --format github
+      - run: npx --yes pg-migration-guard@0.2.0 "migrations/**/*.sql" --changed-since origin/${{ github.base_ref }} --format github
 ```
 
 Connected mode can use a repository secret:
 
 ```yaml
-      - run: npx --yes pg-migration-guard@0.1.1 "migrations/**/*.sql" --format github
+      - run: npx --yes pg-migration-guard@0.2.0 "migrations/**/*.sql" --changed-since origin/${{ github.base_ref }} --format github
         env:
           DATABASE_URL: ${{ secrets.MIGRATION_GUARD_DATABASE_URL }}
 ```
